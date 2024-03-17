@@ -22,7 +22,7 @@ on:
 
 jobs:
   build-and-test:
-    runs-on: ubuntu-latest
+    runs-on: macos-latest
     strategy:
       matrix:
         sdk: [3.3.0, stable, beta, dev]
