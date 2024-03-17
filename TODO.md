@@ -11,7 +11,6 @@ This is a list of todo items, mostly in the order in which they will be implemen
 - Determine how to know if a control, like zoom, is supported.
 - Finish using debugLogging everywhere.
 - All constants and functions should be moved inside of some class or enum.
-- Add support for Windows.
 - Add support for Linux.
 - Add support for video streaming.
 

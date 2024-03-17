@@ -21,7 +21,7 @@ on:
       - 'TODO.md'
 
 jobs:
-  build-and-test:
+  build-test:
     strategy:
       matrix:
         sdk: [3.3.0, stable, beta, dev]

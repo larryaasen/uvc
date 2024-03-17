@@ -16,7 +16,7 @@ You can find more information about UVC USB devices [here on Wikipedia](https://
 
 | Android |  iOS  | MacOS |  Web  | Linux | Windows |
 | :-----: | :---: | :---: | :---: | :---: | :-----: |
-|❌        |❌     |✅     |❌      |❌     |❌       |
+|❌       |❌     |✅     |❌     |❌     |✅       |
 
 
 ## Example
