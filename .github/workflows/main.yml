@@ -22,10 +22,11 @@ on:
 
 jobs:
   build-and-test:
-    runs-on: macos-latest
     strategy:
       matrix:
         sdk: [3.3.0, stable, beta, dev]
+        osRuns: [macos-latest, windows-latest]
+    runs-on: ${{ matrix.osRuns }}
 
     steps:
       - uses: actions/checkout@v3
