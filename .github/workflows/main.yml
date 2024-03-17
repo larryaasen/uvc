@@ -45,15 +45,15 @@ jobs:
         run: dart test --coverage=coverage
 
       - name: Install coverage tools
-        if: ${{ matrix.sdk }} == 'stable'
+        if: ${{ matrix.sdk }} == 'stable' && ${{ matrix.osRuns == 'macos-latest' }}
         run: dart pub global activate coverage
 
       - name: Format coverage file
-        if: ${{ matrix.sdk }} == 'stable'
+        if: ${{ matrix.sdk }} == 'stable' && ${{ matrix.osRuns == 'macos-latest' }}
         run: $HOME/.pub-cache/bin/format_coverage --lcov --in=coverage --out=coverage.lcov --report-on=lib
 
       - name: Upload coverage reports to Codecov
-        if: ${{ matrix.sdk }} == 'stable'
+        if: ${{ matrix.sdk }} == 'stable' && ${{ matrix.osRuns == 'macos-latest' }}
         uses: codecov/codecov-action@v4
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
