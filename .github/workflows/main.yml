@@ -1,0 +1,61 @@
+name: main
+
+on:
+  pull_request:
+    types: [review_requested, opened, synchronize]
+    paths-ignore:
+      - '.gitignore'
+      - 'CHANGELOG.md'
+      - 'LICENSE'
+      - 'README.md'
+      - 'TODO.md'
+
+  push:
+    branches:
+      - '*'
+    paths-ignore:
+      - '.gitignore'
+      - 'CHANGELOG.md'
+      - 'LICENSE'
+      - 'README.md'
+      - 'TODO.md'
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        sdk: [3.3.0, stable, beta, dev]
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - uses: dart-lang/setup-dart@v1
+        with:
+          sdk: ${{ matrix.sdk }}
+
+      - name: Get packages
+        run: dart pub get
+
+      - name: Analyze
+        run: dart analyze
+      
+      - name: Run unit tests
+        run: dart test --coverage=coverage
+
+      - name: Install coverage tools
+        if: ${{ matrix.sdk }} == 'stable'
+        run: dart pub global activate coverage
+
+      - name: Format coverage file
+        if: ${{ matrix.sdk }} == 'stable'
+        run: $HOME/.pub-cache/bin/format_coverage --lcov --in=coverage --out=coverage.lcov --report-on=lib
+
+      - name: Upload coverage reports to Codecov
+        if: ${{ matrix.sdk }} == 'stable'
+        uses: codecov/codecov-action@v4
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+        with:
+          files: coverage.lcov
+  
