@@ -128,7 +128,7 @@ extension UsbConfigurationDescriptorExt on UsbConfigDescriptor {
         // ret = uvc_parse_vc_selector_unit(dev, info, block, block_size);
         break;
       case uvc_vc_desc_subtype.UVC_VC_PROCESSING_UNIT:
-        // ret = uvc_parse_vc_processing_unit(dev, info, block, block_size);
+        ret = uvc_parse_vc_processing_unit(usbDevPtr, info, block, block_size);
         break;
       case uvc_vc_desc_subtype.UVC_VC_EXTENSION_UNIT:
         // ret = uvc_parse_vc_extension_unit(dev, info, block, block_size);
@@ -317,6 +317,25 @@ extension UsbConfigurationDescriptorExt on UsbConfigDescriptor {
     );
 
     return (UVC_SUCCESS, term);
+  }
+
+  /// Parse a VideoControl processing unit.
+  static int uvc_parse_vc_processing_unit(Pointer<libusb_device> usbDevPtr,
+      uvc_device_info info, Uint8List block, int block_size) {
+    int bUnitID = block[3];
+    int bSourceID = block[4];
+    int bmControls = 0;
+
+    for (var i = 7 + block[7]; i >= 8; --i) {
+      bmControls = block[i] + (bmControls << 8);
+    }
+
+    final unit = uvc_processing_unit(
+        bUnitID: bUnitID, bSourceID: bSourceID, bmControls: bmControls);
+
+    info.ctrl_if?.processing_unit_descs.add(unit);
+
+    return UVC_SUCCESS;
   }
 }
 

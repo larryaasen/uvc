@@ -10,6 +10,7 @@ void main() {
   print('zoom: ${camera.zoom.current}');
 
   camera.zoom.current = 225;
+  camera.close();
 
   uvc.dispose();
 }

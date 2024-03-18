@@ -3,7 +3,7 @@
 import 'package:uvc/uvc.dart';
 
 Future<void> main() async {
-  final uvc = UvcLib(debugLogging: true, debugLoggingLibUsb: false);
+  final uvc = UvcLib();
 
   printUvcDevices(uvc);
   printUsbDevices(uvc);
@@ -27,19 +27,21 @@ void printUsbDevices(UvcLib uvc) {
 }
 
 Future<void> cameraExample(UvcLib uvc) async {
-  // final camera = uvc.control(vendorId: 0x1532, productId: 0x0E05); // Razer Kiyo Pro
-  final camera = uvc.control(vendorId: 0x046D, productId: 0x0825); // Logitech
+  final camera =
+      uvc.control(vendorId: 0x1532, productId: 0x0E05); // Razer Kiyo Pro
+  // final camera = uvc.control(vendorId: 0x046D, productId: 0x0825); // Logitech
 
   try {
-    // camera.zoom.current;
-    // camera.zoom.min;
-    // camera.zoom.max;
-    // camera.zoom.defaultValue;
-    // camera.zoom.info;
+    camera.zoom.current;
+    camera.zoom.min;
+    camera.zoom.max;
+    camera.zoom.defaultValue;
+    // camera.zoom.information;
     // camera.zoom.len;
     camera.zoom.resolution;
   } catch (e) {
     print('example: camera zoom set error: $e');
+    camera.close();
     return;
   }
 
@@ -47,23 +49,13 @@ Future<void> cameraExample(UvcLib uvc) async {
     printValues('backlight compensation', camera.backlightCompensation);
     printValues('focus (auto)', camera.focusAuto);
     printValues('focus', camera.focus);
-    printValues('zoom', camera.zoom);
     printValues('pan', camera.pan);
     printValues('tilt', camera.tilt);
+    printValues('zoom', camera.zoom);
+    printValues('powerline frequency', camera.powerlineFrequency);
   } catch (e) {
     print('example: camera error: $e');
   }
-
-  // print("zoom relative current: ${camera.zoom.current}");
-  // print("zoom absolute current: ${camera.zoom.current}");
-
-  camera.pan.current;
-  camera.pan.min;
-  camera.tilt.current;
-  camera.tilt.min;
-
-  camera.focus.current;
-  camera.focusAuto.current;
 
   await animateValue(
       Duration(seconds: 5), 100, 400, (value) => camera.zoom.current = value);

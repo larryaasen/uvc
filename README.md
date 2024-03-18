@@ -32,6 +32,7 @@ void main() {
   print('zoom: ${camera.zoom.current}');
 
   camera.zoom.current = 225;
+  camera.close();
 
   uvc.dispose();
 }
@@ -117,6 +118,12 @@ camera.zoom.min;
 camera.zoom.resolution;
 ```
 
+### Backlight Compensation
+
+```
+camera.backlightCompensation.current;
+```
+
 ### Focus
 
 ```
@@ -127,6 +134,12 @@ camera.zoom.current;
 
 ```
 camera.focusAuto.current;
+```
+
+### Powerline Frequency
+
+```
+camera.powerlineFrequency.current;
 ```
 
 ## Debugging

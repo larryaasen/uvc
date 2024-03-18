@@ -13,10 +13,11 @@ import 'uvc_control.dart';
 /// A library for controlling UVC compliant webcams.
 class UvcLib {
   /// Loads the library for controlling UVC compliant webcams.
-  UvcLib(
-      {String? libraryName,
-      bool debugLogging = false,
-      bool debugLoggingLibUsb = false}) {
+  UvcLib({
+    String? libraryName,
+    this.debugLogging = false,
+    this.debugLoggingLibUsb = false,
+  }) {
     if (_libusb == null) {
       _libusb = Libusb(_loadLibrary(libraryName: libraryName));
 
@@ -42,21 +43,21 @@ class UvcLib {
         libusb.libusb_set_debug(
             nullptr, libusb_log_level.LIBUSB_LOG_LEVEL_DEBUG);
       }
-
-      if (_libusb != null) {
-        _devices = UsbDevices(libusb: _libusb!);
-      }
     }
   }
+
+  final bool debugLogging;
+  final bool debugLoggingLibUsb;
 
   static Libusb? _libusb;
   Libusb get libusb => _libusb!;
 
   static Pointer<Pointer<libusb_context>>? _contextPtr;
-  late UsbDevices _devices;
 
   /// Access to all USB devices, including UVC devices.
-  UsbDevices get devices => _devices;
+  UsbDevices get devices {
+    return UsbDevices(libusb: _libusb);
+  }
 
   /// Release all resources used by this library including the libusb library.
   void dispose() {
@@ -74,12 +75,15 @@ class UvcLib {
   bool get isLibraryLoaded => _libusb != null;
 
   /// Create a camera control for a `vendorId` and `productId`.
+  /// Remember to release the camera with `close` when you are done using it.
   UvcControl control({required int vendorId, required int productId}) =>
       UvcControl(
-          libusb: libusb,
-          contextPtr: _contextPtr,
-          vendorId: vendorId,
-          productId: productId);
+        libusb: libusb,
+        contextPtr: _contextPtr,
+        vendorId: vendorId,
+        productId: productId,
+        debugLogging: debugLogging,
+      );
 
   DynamicLibrary _loadLibrary({String? libraryName}) {
     try {
@@ -98,10 +102,14 @@ class UvcLib {
           throw UnsupportedError('This platform is not supported.');
         }
       }
-      print('uvc: Opening library: $fullPath');
+      if (debugLogging) {
+        print('uvc: Opening library: $fullPath');
+      }
       return DynamicLibrary.open(fullPath);
     } catch (e) {
-      print('uvc: loadLibrary exception: $e');
+      if (debugLogging) {
+        print('uvc: loadLibrary exception: $e');
+      }
       throw 'uvc: libusb dynamic library not found: $e';
     }
   }

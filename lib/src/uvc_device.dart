@@ -70,7 +70,7 @@ class uvc_control_interface {
   uvc_input_terminal? input_term_descs;
   // // struct uvc_output_terminal *output_term_descs;
   // struct uvc_selector_unit *selector_unit_descs;
-  // struct uvc_processing_unit *processing_unit_descs;
+  List<uvc_processing_unit> processing_unit_descs = [];
   // struct uvc_extension_unit *extension_unit_descs;
   int? bcdUVC;
 
@@ -79,4 +79,23 @@ class uvc_control_interface {
 
   /// Interface number
   int? bInterfaceNumber;
+}
+
+// Represents post-capture processing functions
+class uvc_processing_unit {
+  uvc_processing_unit({
+    required this.bUnitID,
+    required this.bSourceID,
+    required this.bmControls,
+  });
+
+  // struct uvc_processing_unit *prev, *next;
+  /// Index of the processing unit within the device
+  int bUnitID;
+
+  /// Index of the terminal from which the device accepts images
+  int bSourceID;
+
+  /// Processing controls (meaning of bits given in {uvc_pu_ctrl_selector})
+  int bmControls;
 }

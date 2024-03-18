@@ -24,6 +24,8 @@ extension UsbDeviceDescriptorExt on UsbDeviceDescriptor {
     final handlePtr = calloc<Pointer<libusb_device_handle>>();
     if (libusb.libusb_open(usbDevPtr, handlePtr) ==
         libusb_error.LIBUSB_SUCCESS) {
+      // print('uvc: opened device');
+
       final handle = handlePtr.value;
 
       manufacturer =
@@ -34,6 +36,8 @@ extension UsbDeviceDescriptorExt on UsbDeviceDescriptor {
 
       libusb.libusb_close(handle);
       calloc.free(handlePtr);
+
+      // print('uvc: closed device');
     }
 
     final desc = UsbDeviceDescriptor(

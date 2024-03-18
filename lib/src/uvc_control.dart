@@ -110,33 +110,40 @@ typedef UvcControlSetHandler = void Function(
     int bInterfaceNumber);
 
 class UvcControl {
-  UvcControl(
-      {required Libusb libusb,
-      required Pointer<Pointer<libusb_context>>? contextPtr,
-      required this.vendorId,
-      required this.productId})
-      : _libusb = libusb,
+  UvcControl({
+    required Libusb libusb,
+    required Pointer<Pointer<libusb_context>>? contextPtr,
+    required this.vendorId,
+    required this.productId,
+    this.debugLogging = false,
+  })  : _libusb = libusb,
         _contextPtr = contextPtr;
 
   final Libusb _libusb;
   final Pointer<Pointer<libusb_context>>? _contextPtr;
   final int vendorId;
   final int productId;
+  final bool debugLogging;
 
   Pointer<libusb_device_handle>? _handlePtr;
   final info = uvc_device_info();
 
-  /// Backlight compensation
+  /// Backlight compensation: 0: off or 1: on
   UvcController get backlightCompensation =>
       _controller(_getBacklightCompensation, _unsupportedSet,
           vendorId: vendorId, productId: productId);
 
+  /// Powerline frequency: 0: disabled: 1: 50 Hz, 2: 60 Hz: 3: automatic
+  UvcController get powerlineFrequency =>
+      _controller(_getPowerlineFrequency, _unsupportedSet,
+          vendorId: vendorId, productId: productId);
+
   /// The Focus control.
-  UvcController get focus => _controller(_getFocusAbsolute, _unsupportedSet,
+  UvcController get focus => _controller(_getFocusAbsolute, _setFocusAbsolute,
       vendorId: vendorId, productId: productId);
 
   /// Auto focus. A value of 1 means auto focus is on, and a value of 0 means it is off.
-  UvcController get focusAuto => _controller(_getFocusAuto, _unsupportedSet,
+  UvcController get focusAuto => _controller(_getFocusAuto, _setFocusAuto,
       vendorId: vendorId, productId: productId);
 
   /// The Pan control.
@@ -156,6 +163,7 @@ class UvcControl {
       _controller(_getZoomRelative, _unsupportedSet,
           vendorId: vendorId, productId: productId);
 
+  /// Close this camera and release the resources.
   void dispose() {
     close();
   }
@@ -181,6 +189,7 @@ class UvcControl {
       setHandler,
       bTerminalID: bTerminalID,
       bInterfaceNumber: bInterfaceNumber,
+      info: info,
     );
   }
 
@@ -191,22 +200,32 @@ class UvcControl {
         _contextPtr.value, vendorId, productId);
     if (handlePtr.address == 0) return null;
 
+    if (debugLogging) {
+      print('uvc: opened device vendorId: $vendorId, productId: $productId');
+    }
+
     _handlePtr = handlePtr;
 
     final usbDevPtr = _libusb.libusb_get_device(handlePtr);
 
     final ret = _uvc_get_device_info(usbDevPtr, info);
     if (ret != UVC_SUCCESS) {
-      print('uvc: UVCController._uvc_get_device_info failure: $ret');
+      if (debugLogging) {
+        print('uvc: UVCController._uvc_get_device_info failure: $ret');
+      }
     }
 
     return _handlePtr;
   }
 
+  /// Close this camera and release the resources.
   void close() {
     if (_handlePtr != null) {
       _libusb.libusb_close(_handlePtr!);
       _handlePtr = null;
+      if (debugLogging) {
+        print('uvc: closed device vendorId: $vendorId, productId: $productId');
+      }
     }
   }
 
@@ -255,15 +274,15 @@ class UvcControl {
           int value, int bTerminalID, int bInterfaceNumber) =>
       throw UnsupportedError('uvc: Not implemented or supported yet: $reqCode');
 
-  /// Reads the backlightCompensation control.
+  /// Reads the backlight compensation control.
   int _getBacklightCompensation(Pointer<libusb_device_handle> handle,
       UvcReqCode reqCode, int bTerminalID, int bInterfaceNumber) {
-    return 0;
-/*
     const dataLength = 2;
     final data = calloc<Uint8>(dataLength);
 
-    final ret = libusb.libusb_control_transfer(
+    final bUnitID = info.ctrl_if?.processing_unit_descs.first.bUnitID ?? 0;
+
+    final ret = _libusb.libusb_control_transfer(
         handle,
         REQ_TYPE_GET,
         reqCode.value,
@@ -279,10 +298,44 @@ class UvcControl {
     }
 
     calloc.free(data);
-    final err = libusb.libusb_strerror(ret);
-    print('uvc: libusb_control_transfer error: ${fromInt8ToString(err)}');
-    throw Exception('uvc: libusb_control_transfer error: ${fromInt8ToString(err)}');
-    */
+    final err = _libusb.libusb_strerror(ret);
+    if (debugLogging) {
+      print('uvc: _getBacklightCompensation error: ${fromInt8ToString(err)}');
+    }
+    throw Exception(
+        'uvc: _getBacklightCompensation error: ${fromInt8ToString(err)}');
+  }
+
+  /// Reads the powerline frequency control.
+  int _getPowerlineFrequency(Pointer<libusb_device_handle> handle,
+      UvcReqCode reqCode, int bTerminalID, int bInterfaceNumber) {
+    const dataLength = 1;
+    final data = calloc<Uint8>(dataLength);
+
+    final bUnitID = info.ctrl_if?.processing_unit_descs.first.bUnitID ?? 0;
+
+    final ret = _libusb.libusb_control_transfer(
+        handle,
+        REQ_TYPE_GET,
+        reqCode.value,
+        (UvcPuControlSelector.powerLineFrequency.index << 8).toUnsigned(16),
+        (bUnitID << 8 | bInterfaceNumber).toUnsigned(16),
+        data,
+        dataLength,
+        0);
+    if (ret == dataLength) {
+      final value = data[0];
+      calloc.free(data);
+      return value;
+    }
+
+    calloc.free(data);
+    final err = _libusb.libusb_strerror(ret);
+    if (debugLogging) {
+      print('uvc: _getPowerlineFrequency error: ${fromInt8ToString(err)}');
+    }
+    throw Exception(
+        'uvc: _getPowerlineFrequency error: ${fromInt8ToString(err)}');
   }
 
   /// Reads the FOCUS ABSOLUTE control.
@@ -308,9 +361,46 @@ class UvcControl {
 
     calloc.free(data);
     final err = _libusb.libusb_strerror(ret);
-    print('uvc: libusb_control_transfer error: ${fromInt8ToString(err)}');
-    throw Exception(
-        'uvc: libusb_control_transfer error: ${fromInt8ToString(err)}');
+    if (debugLogging) {
+      print('uvc: _getFocusAbsolute error: ${fromInt8ToString(err)}');
+    }
+    throw Exception('uvc: _getFocusAbsolute error: ${fromInt8ToString(err)}');
+  }
+
+  /// Sets the FOCUS ABSOLUTE control.
+  /// UVC request code (A.8)
+  void _setFocusAbsolute(Pointer<libusb_device_handle> handle,
+      UvcReqCode reqCode, int value, int bTerminalID, int bInterfaceNumber) {
+    // The focus update can only be made when auto focus is true.
+    final focusAuto =
+        _getFocusAuto(handle, reqCode, bTerminalID, bInterfaceNumber);
+    if (focusAuto == 1) return;
+
+    const dataLength = 2;
+    final data = calloc<Uint8>(dataLength);
+
+    SHORT_TO_SW(value, data);
+
+    final ret = _libusb.libusb_control_transfer(
+        handle,
+        REQ_TYPE_SET,
+        reqCode.value,
+        (UvcCtCtrlSelector.focusAbsoluteControl.value << 8).toUnsigned(16),
+        (bTerminalID << 8 | bInterfaceNumber).toUnsigned(16),
+        data,
+        dataLength,
+        0);
+
+    calloc.free(data);
+    if (ret == dataLength) {
+      return;
+    }
+
+    final err = _libusb.libusb_strerror(ret);
+    if (debugLogging) {
+      print('uvc: _setFocusAbsolute error: ${fromInt8ToString(err)}');
+    }
+    throw Exception('uvc: _setFocusAbsolute error: ${fromInt8ToString(err)}');
   }
 
   /// Reads the FOCUS AUTO control.
@@ -336,9 +426,40 @@ class UvcControl {
 
     calloc.free(data);
     final err = _libusb.libusb_strerror(ret);
-    print('uvc: libusb_control_transfer error: ${fromInt8ToString(err)}');
-    throw Exception(
-        'uvc: libusb_control_transfer error: ${fromInt8ToString(err)}');
+    if (debugLogging) {
+      print('uvc: _getFocusAuto error: ${fromInt8ToString(err)}');
+    }
+    throw Exception('uvc: _getFocusAuto error: ${fromInt8ToString(err)}');
+  }
+
+  /// Sets the FOCUS AUTO control.
+  /// UVC request code (A.8)
+  void _setFocusAuto(Pointer<libusb_device_handle> handle, UvcReqCode reqCode,
+      int value, int bTerminalID, int bInterfaceNumber) {
+    const dataLength = 1;
+    final data = calloc<Uint8>(dataLength);
+    data[0] = value;
+
+    final ret = _libusb.libusb_control_transfer(
+        handle,
+        REQ_TYPE_SET,
+        reqCode.value,
+        (UvcCtCtrlSelector.focusAutoControl.value << 8).toUnsigned(16),
+        (bTerminalID << 8 | bInterfaceNumber).toUnsigned(16),
+        data,
+        dataLength,
+        0);
+
+    calloc.free(data);
+    if (ret == dataLength) {
+      return;
+    }
+
+    final err = _libusb.libusb_strerror(ret);
+    if (debugLogging) {
+      print('uvc: _setFocusAuto error: ${fromInt8ToString(err)}');
+    }
+    throw Exception('uvc: _setFocusAuto error: ${fromInt8ToString(err)}');
   }
 
   /// Sets the ZOOM ABSOLUTE control.
@@ -366,7 +487,9 @@ class UvcControl {
     }
 
     final err = _libusb.libusb_strerror(ret);
-    print('uvc: _setZoomAbsolute error: ${fromInt8ToString(err)}');
+    if (debugLogging) {
+      print('uvc: _setZoomAbsolute error: ${fromInt8ToString(err)}');
+    }
     throw Exception('uvc: _setZoomAbsolute error: ${fromInt8ToString(err)}');
   }
 
@@ -394,9 +517,10 @@ class UvcControl {
 
     calloc.free(data);
     final err = _libusb.libusb_strerror(ret);
-    print('uvc: libusb_control_transfer error: ${fromInt8ToString(err)}');
-    throw Exception(
-        'uvc: libusb_control_transfer error: ${fromInt8ToString(err)}');
+    if (debugLogging) {
+      print('uvc: _getZoomAbsolute error: ${fromInt8ToString(err)}');
+    }
+    throw Exception('uvc: _getZoomAbsolute error: ${fromInt8ToString(err)}');
   }
 
   /// Reads the ZOOM RELATIVE control.
@@ -425,9 +549,10 @@ class UvcControl {
 
     calloc.free(data);
     final err = _libusb.libusb_strerror(ret);
-    print('uvc: libusb_control_transfer error: ${fromInt8ToString(err)}');
-    throw Exception(
-        'uvc: libusb_control_transfer error: ${fromInt8ToString(err)}');
+    if (debugLogging) {
+      print('uvc: _getZoomRelative error: ${fromInt8ToString(err)}');
+    }
+    throw Exception('uvc: _getZoomRelative error: ${fromInt8ToString(err)}');
   }
 
   /// Reads the PANTILT ABSOLUTE control and returns the pan value.
@@ -454,9 +579,10 @@ class UvcControl {
 
     calloc.free(data);
     final err = _libusb.libusb_strerror(ret);
-    print('uvc: libusb_control_transfer error: ${fromInt8ToString(err)}');
-    throw Exception(
-        'uvc: libusb_control_transfer error: ${fromInt8ToString(err)}');
+    if (debugLogging) {
+      print('uvc: _getPanAbsolute error: ${fromInt8ToString(err)}');
+    }
+    throw Exception('uvc: _getPanAbsolute error: ${fromInt8ToString(err)}');
   }
 
   /// Reads the PANTILT ABSOLUTE control and returns the tilt value.
@@ -483,9 +609,10 @@ class UvcControl {
 
     calloc.free(data);
     final err = _libusb.libusb_strerror(ret);
-    print('uvc: libusb_control_transfer error: ${fromInt8ToString(err)}');
-    throw Exception(
-        'uvc: libusb_control_transfer error: ${fromInt8ToString(err)}');
+    if (debugLogging) {
+      print('uvc: _getTiltAbsolute error: ${fromInt8ToString(err)}');
+    }
+    throw Exception('uvc: _getTiltAbsolute error: ${fromInt8ToString(err)}');
   }
 
   /// Sets the PAN ABSOLUTE control.
@@ -519,7 +646,9 @@ class UvcControl {
     }
 
     final err = _libusb.libusb_strerror(ret);
-    print('uvc: _setPanAbsolute error: ${fromInt8ToString(err)}');
+    if (debugLogging) {
+      print('uvc: _setPanAbsolute error: ${fromInt8ToString(err)}');
+    }
     throw Exception('uvc: _setPanAbsolute error: ${fromInt8ToString(err)}');
   }
 
@@ -554,7 +683,9 @@ class UvcControl {
     }
 
     final err = _libusb.libusb_strerror(ret);
-    print('uvc: _setTiltAbsolute error: ${fromInt8ToString(err)}');
+    if (debugLogging) {
+      print('uvc: _setTiltAbsolute error: ${fromInt8ToString(err)}');
+    }
     throw Exception('uvc: _setTiltAbsolute error: ${fromInt8ToString(err)}');
   }
 }
@@ -566,6 +697,7 @@ class UvcController {
     this.setHandler, {
     required this.bTerminalID,
     required this.bInterfaceNumber,
+    required this.info,
   });
 
   Pointer<libusb_device_handle>? handlePtr;
@@ -573,6 +705,7 @@ class UvcController {
   final UvcControlSetHandler setHandler;
   final int bTerminalID;
   final int bInterfaceNumber;
+  final uvc_device_info info;
 
   /// Get the control current value.
   int? get current =>
@@ -587,7 +720,7 @@ class UvcController {
 
   /// Get the control info value.
   /// TODO: this does not work for `zoom absolute get`.
-  int? get info =>
+  int? get information =>
       _controlGet(UvcReqCode.getInfo, bTerminalID, bInterfaceNumber);
 
   /// Get the control length value.

@@ -13,7 +13,7 @@ class UsbDevices {
   /// Creates access to all USB devices, including UVC devices.
   UsbDevices({required this.libusb});
 
-  final Libusb libusb;
+  final Libusb? libusb;
 
   /// Get all of the USB devices on this system, or just the UVC USB devices.
   List<UsbDevice> get({bool onlyUvcDevices = false}) =>
@@ -21,9 +21,11 @@ class UsbDevices {
 
   /// Get all of the UVC devices on this system.
   List<UsbDevice> _getDevices({bool onlyUvcDevices = false}) {
+    if (libusb == null) return [];
     var deviceListPtr = calloc<Pointer<Pointer<libusb_device>>>();
 
-    final numUsbDevices = libusb.libusb_get_device_list(nullptr, deviceListPtr);
+    final numUsbDevices =
+        libusb!.libusb_get_device_list(nullptr, deviceListPtr);
     if (numUsbDevices < 0) {
       calloc.free(deviceListPtr);
       return [];
@@ -35,15 +37,15 @@ class UsbDevices {
 
     for (var devIdx = 0; devIdx < numUsbDevices; devIdx++) {
       final usbDevPtr = deviceList[devIdx];
-      final usbDevice = UsbDeviceExt.fromDev(libusb, usbDevPtr);
+      final usbDevice = UsbDeviceExt.fromDev(libusb!, usbDevPtr);
       if (usbDevice == null) continue;
       if (!onlyUvcDevices || usbDevice.isUvc) {
         listInternal.add(usbDevice);
       }
     }
 
+    libusb!.libusb_free_device_list(deviceList, 1);
     calloc.free(deviceListPtr);
-    libusb.libusb_free_device_list(deviceList, 1);
 
     return listInternal;
   }
