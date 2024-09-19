@@ -19,7 +19,9 @@ class UvcLib {
     this.debugLoggingLibUsb = false,
   }) {
     if (_libusb == null) {
-      _libusb = Libusb(_loadLibrary(libraryName: libraryName));
+      final lib = _loadLibrary(libraryName: libraryName);
+      _lib = lib;
+      _libusb = Libusb(lib);
 
       final contextPtr = calloc<Pointer<libusb_context>>();
       final initResult = _libusb!.libusb_init(contextPtr);
@@ -30,6 +32,9 @@ class UvcLib {
         _libusb!.libusb_exit(contextPtr.value);
         calloc.free(contextPtr);
         _libusb = null;
+
+        _lib?.close();
+        _lib = null;
         return;
       }
 
@@ -49,6 +54,7 @@ class UvcLib {
   final bool debugLogging;
   final bool debugLoggingLibUsb;
 
+  DynamicLibrary? _lib;
   static Libusb? _libusb;
   Libusb get libusb => _libusb!;
 
@@ -67,6 +73,15 @@ class UvcLib {
 
       calloc.free(_contextPtr!);
       _contextPtr = null;
+      if (debugLogging) {
+        print('uvc: libusb library deinitialized');
+      }
+
+      _lib?.close();
+      _lib = null;
+      if (debugLogging) {
+        print('uvc: library closed');
+      }
     }
     UsbStringDescriptor.dispose();
   }
@@ -93,7 +108,10 @@ class UvcLib {
       } else {
         final libraryPath = Directory.current.path;
         if (Platform.isMacOS) {
-          fullPath = '$libraryPath/libusb-1.0.27/libusb-1.0.0.dylib';
+          final result = Process.runSync('uname', ['-m']);
+          final isArm = result.stdout.toString().contains('arm64');
+          final libName = 'libusb-1.0.0-${isArm ? 'arm' : 'intel'}';
+          fullPath = '$libraryPath/libusb-1.0.27/$libName.dylib';
         } else if (Platform.isWindows) {
           fullPath = '$libraryPath/libusb-1.0.27/libusb-1.0.dll';
         } else if (Platform.isLinux) {
@@ -103,9 +121,10 @@ class UvcLib {
         }
       }
       if (debugLogging) {
-        print('uvc: Opening library: $fullPath');
+        print('uvc: opening library: $fullPath');
       }
-      return DynamicLibrary.open(fullPath);
+      final lib = DynamicLibrary.open(fullPath);
+      return lib;
     } catch (e) {
       if (debugLogging) {
         print('uvc: loadLibrary exception: $e');

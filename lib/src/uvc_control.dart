@@ -109,6 +109,68 @@ typedef UvcControlSetHandler = void Function(
     int bTerminalID,
     int bInterfaceNumber);
 
+class UvcController {
+  UvcController(
+    this.handlePtr,
+    this.getHandler,
+    this.setHandler, {
+    required this.bTerminalID,
+    required this.bInterfaceNumber,
+    required this.info,
+    required this.name,
+  });
+
+  Pointer<libusb_device_handle>? handlePtr;
+  final UvcControlGetHandler getHandler;
+  final UvcControlSetHandler setHandler;
+  final int bTerminalID;
+  final int bInterfaceNumber;
+  final uvc_device_info info;
+  final String name;
+
+  /// Get the control current value.
+  int? get current =>
+      _controlGet(UvcReqCode.getCurrent, bTerminalID, bInterfaceNumber);
+
+  /// Set the control current value.
+  set current(int? value) => _controlSet(UvcReqCode.setCurrent, value);
+
+  /// Get the control default value.
+  int? get defaultValue =>
+      _controlGet(UvcReqCode.getDef, bTerminalID, bInterfaceNumber);
+
+  /// Get the control info value.
+  /// TODO: this does not work for `zoom absolute get`.
+  int? get information =>
+      _controlGet(UvcReqCode.getInfo, bTerminalID, bInterfaceNumber);
+
+  /// Get the control length value.
+  /// TODO: this does not work for `zoom absolute get`.
+  int? get len => _controlGet(UvcReqCode.getLen, bTerminalID, bInterfaceNumber);
+
+  /// Get the control maximum value.
+  int? get max => _controlGet(UvcReqCode.getMax, bTerminalID, bInterfaceNumber);
+
+  /// Get the control minimum value.
+  int? get min => _controlGet(UvcReqCode.getMin, bTerminalID, bInterfaceNumber);
+
+  /// Get the control resolution.
+  int? get resolution =>
+      _controlGet(UvcReqCode.getRes, bTerminalID, bInterfaceNumber);
+
+  int? _controlGet(UvcReqCode reqCode, int bTerminalID, int bInterfaceNumber) {
+    if (handlePtr == null) return null;
+    final rv = getHandler(handlePtr!, reqCode, bTerminalID, bInterfaceNumber);
+    return rv;
+  }
+
+  void _controlSet(UvcReqCode reqCode, int? value) {
+    if (handlePtr == null || value == null) return;
+    setHandler(handlePtr!, reqCode, value, bTerminalID, bInterfaceNumber);
+    return;
+  }
+}
+
 class UvcControl {
   UvcControl({
     required Libusb libusb,
@@ -126,50 +188,46 @@ class UvcControl {
   final bool debugLogging;
 
   Pointer<libusb_device_handle>? _handlePtr;
-  final info = uvc_device_info();
-
-  /// Backlight compensation: 0: off or 1: on
-  UvcController get backlightCompensation =>
-      _controller(_getBacklightCompensation, _unsupportedSet,
-          vendorId: vendorId, productId: productId);
-
-  /// Powerline frequency: 0: disabled: 1: 50 Hz, 2: 60 Hz: 3: automatic
-  UvcController get powerlineFrequency =>
-      _controller(_getPowerlineFrequency, _unsupportedSet,
-          vendorId: vendorId, productId: productId);
-
-  /// The Focus control.
-  UvcController get focus => _controller(_getFocusAbsolute, _setFocusAbsolute,
-      vendorId: vendorId, productId: productId);
-
-  /// Auto focus. A value of 1 means auto focus is on, and a value of 0 means it is off.
-  UvcController get focusAuto => _controller(_getFocusAuto, _setFocusAuto,
-      vendorId: vendorId, productId: productId);
-
-  /// The Pan control.
-  UvcController get pan => _controller(_getPanAbsolute, _setPanAbsolute,
-      vendorId: vendorId, productId: productId);
-
-  /// The Tilt control.
-  UvcController get tilt => _controller(_getTiltAbsolute, _setTiltAbsolute,
-      vendorId: vendorId, productId: productId);
-
-  /// The Zoom absolute control.
-  UvcController get zoom => _controller(_getZoomAbsolute, _setZoomAbsolute,
-      vendorId: vendorId, productId: productId);
-
-  /// The Zoom relative control.
-  UvcController get zoomRelative =>
-      _controller(_getZoomRelative, _unsupportedSet,
-          vendorId: vendorId, productId: productId);
+  final _info = uvc_device_info();
 
   /// Close this camera and release the resources.
   void dispose() {
     close();
   }
 
-  UvcController _controller(
-      UvcControlGetHandler getHandler, UvcControlSetHandler setHandler,
+  bool isOpen() {
+    final handlePtr = _open();
+    return handlePtr != null;
+  }
+
+  /// Perform a USB port reset for a USB device. Returns true on success.
+  bool resetDevice() {
+    final handlePtr = _open();
+    if (handlePtr == null) return false;
+
+    // Perform an USB port reset for an usb device. Returns 0 on success, LIBUSB_ERROR_NOT_FOUND if
+    // re-enumeration is required or if the device has been disconnected and a LIBUSB_ERROR code on failure.
+    final ret = _libusb.libusb_reset_device(handlePtr);
+
+    final success = ret == libusb_error.LIBUSB_SUCCESS;
+
+    if (debugLogging) {
+      if (success) {
+        print('uvc: reset device vendorId: $vendorId, productId: $productId');
+      } else {
+        print(
+            'uvc: reset device failed: $ret, vendorId: $vendorId, productId: $productId');
+      }
+    }
+
+    if (success) {
+      close();
+    }
+    return success;
+  }
+
+  UvcController _controller(String name, UvcControlGetHandler getHandler,
+      UvcControlSetHandler setHandler,
       {required int vendorId, required int productId}) {
     final handlePtr = _open();
 
@@ -177,10 +235,10 @@ class UvcControl {
     int bTerminalID = 0;
 
     if (handlePtr != null) {
-      bInterfaceNumber = info.config?.interfaces.first.interfaceDescriptors
+      bInterfaceNumber = _info.config?.interfaces.first.interfaceDescriptors
               .first.bInterfaceNumber ??
           0;
-      bTerminalID = info.ctrl_if?.input_term_descs?.bTerminalID ?? 0;
+      bTerminalID = _info.ctrl_if?.input_term_descs?.bTerminalID ?? 0;
     }
 
     return UvcController(
@@ -189,7 +247,8 @@ class UvcControl {
       setHandler,
       bTerminalID: bTerminalID,
       bInterfaceNumber: bInterfaceNumber,
-      info: info,
+      info: _info,
+      name: name,
     );
   }
 
@@ -208,7 +267,7 @@ class UvcControl {
 
     final usbDevPtr = _libusb.libusb_get_device(handlePtr);
 
-    final ret = _uvc_get_device_info(usbDevPtr, info);
+    final ret = _uvc_get_device_info(usbDevPtr, _info);
     if (ret != UVC_SUCCESS) {
       if (debugLogging) {
         print('uvc: UVCController._uvc_get_device_info failure: $ret');
@@ -262,9 +321,6 @@ class UvcControl {
     return UVC_SUCCESS;
   }
 
-  static const int REQ_TYPE_SET = 0x21;
-  static const int REQ_TYPE_GET = 0xa1; // LIBUSB_ENDPOINT_IN and ???
-
   // ignore: unused_element
   int _unsupportedGet(Pointer<libusb_device_handle> handle, UvcReqCode reqCode,
           int bTerminalID, int bInterfaceNumber) =>
@@ -273,6 +329,109 @@ class UvcControl {
   void _unsupportedSet(Pointer<libusb_device_handle> handle, UvcReqCode reqCode,
           int value, int bTerminalID, int bInterfaceNumber) =>
       throw UnsupportedError('uvc: Not implemented or supported yet: $reqCode');
+}
+
+extension UvcControlExt on UvcControl {
+  /// Backlight compensation: 0: off or 1: on
+  UvcController get backlightCompensation => _controller(
+      'backlight compensation', _getBacklightCompensation, _unsupportedSet,
+      vendorId: vendorId, productId: productId);
+
+  /// Brightness
+  UvcController get brightness =>
+      _controller('brightness', _getBrightness, _setBrightness,
+          vendorId: vendorId, productId: productId);
+
+  /// Contrast
+  UvcController get contrast =>
+      _controller('contrast', _getContrast, _setContrast,
+          vendorId: vendorId, productId: productId);
+
+  /// Saturation
+  UvcController get saturation =>
+      _controller('saturation', _getSaturation, _setSaturation,
+          vendorId: vendorId, productId: productId);
+
+  /// Sharpness
+  UvcController get sharpness =>
+      _controller('sharpness', _getSharpness, _setSharpness,
+          vendorId: vendorId, productId: productId);
+
+  /// White Balance
+  UvcController get whiteBalance =>
+      _controller('white balance', _getWhiteBalance, _setWhiteBalance,
+          vendorId: vendorId, productId: productId);
+
+  /// Powerline frequency: 0: disabled: 1: 50 Hz, 2: 60 Hz: 3: automatic
+  UvcController get powerlineFrequency => _controller(
+      'powerline frequency', _getPowerlineFrequency, _unsupportedSet,
+      vendorId: vendorId, productId: productId);
+
+  /// The Focus control.
+  UvcController get focus =>
+      _controller('focus', _getFocusAbsolute, _setFocusAbsolute,
+          vendorId: vendorId, productId: productId);
+
+  /// Auto focus. A value of 1 means auto focus is on, and a value of 0 means it is off.
+  UvcController get focusAuto =>
+      _controller('auto focus', _getFocusAuto, _setFocusAuto,
+          vendorId: vendorId, productId: productId);
+
+  /// The Pan control.
+  UvcController get pan => _controller('pan', _getPanAbsolute, _setPanAbsolute,
+      vendorId: vendorId, productId: productId);
+
+  /// The Tilt control.
+  UvcController get tilt =>
+      _controller('tilt', _getTiltAbsolute, _setTiltAbsolute,
+          vendorId: vendorId, productId: productId);
+
+  /// The Zoom absolute control.
+  UvcController get zoom =>
+      _controller('zoom', _getZoomAbsolute, _setZoomAbsolute,
+          vendorId: vendorId, productId: productId);
+
+  /// The Zoom relative control.
+  UvcController get zoomRelative =>
+      _controller('zoom relative', _getZoomRelative, _unsupportedSet,
+          vendorId: vendorId, productId: productId);
+
+  /// Sets the TILT ABSOLUTE control.
+  /// UVC request code (A.8)
+  void _setTiltAbsolute(Pointer<libusb_device_handle> handle,
+      UvcReqCode reqCode, int value, int bTerminalID, int bInterfaceNumber) {
+    const dataLength = 8;
+    final data = calloc<Uint8>(dataLength);
+
+    // First, get the pan value since pan/tilt have to be set together.
+    final pan = _getPanAbsolute(
+        handle, UvcReqCode.getCurrent, bTerminalID, bInterfaceNumber);
+    final tilt = value;
+
+    INT_TO_DW(pan, data + 0);
+    INT_TO_DW(tilt, data + 4);
+
+    final ret = _libusb.libusb_control_transfer(
+        handle,
+        REQ_TYPE_SET,
+        reqCode.value,
+        (UvcCtCtrlSelector.pantiltAbsoluteControl.value << 8).toUnsigned(16),
+        (bTerminalID << 8 | bInterfaceNumber).toUnsigned(16),
+        data,
+        dataLength,
+        0);
+
+    calloc.free(data);
+    if (ret == dataLength) {
+      return;
+    }
+
+    final err = _libusb.libusb_strerror(ret);
+    if (debugLogging) {
+      print('uvc: _setTiltAbsolute error: ${fromInt8ToString(err)}');
+    }
+    throw Exception('uvc: _setTiltAbsolute error: ${fromInt8ToString(err)}');
+  }
 
   /// Reads the backlight compensation control.
   int _getBacklightCompensation(Pointer<libusb_device_handle> handle,
@@ -280,7 +439,7 @@ class UvcControl {
     const dataLength = 2;
     final data = calloc<Uint8>(dataLength);
 
-    final bUnitID = info.ctrl_if?.processing_unit_descs.first.bUnitID ?? 0;
+    final bUnitID = _info.ctrl_if?.processing_unit_descs.first.bUnitID ?? 0;
 
     final ret = _libusb.libusb_control_transfer(
         handle,
@@ -299,11 +458,302 @@ class UvcControl {
 
     calloc.free(data);
     final err = _libusb.libusb_strerror(ret);
-    if (debugLogging) {
-      print('uvc: _getBacklightCompensation error: ${fromInt8ToString(err)}');
+    final msg =
+        'uvc: _getBacklightCompensation error: ${fromInt8ToString(err)}';
+    if (debugLogging) print(msg);
+    throw Exception(msg);
+  }
+
+  /// Reads the BRIGHTNESS control.
+  int _getBrightness(Pointer<libusb_device_handle> handle, UvcReqCode reqCode,
+      int bTerminalID, int bInterfaceNumber) {
+    const dataLength = 2;
+    final data = calloc<Uint8>(dataLength);
+
+    final bUnitID = _info.ctrl_if?.processing_unit_descs.first.bUnitID ?? 0;
+
+    final ret = _libusb.libusb_control_transfer(
+        handle,
+        REQ_TYPE_GET,
+        reqCode.value,
+        (UvcPuControlSelector.brightness.index << 8).toUnsigned(16),
+        (bUnitID << 8 | bInterfaceNumber).toUnsigned(16),
+        data,
+        dataLength,
+        0);
+    if (ret == dataLength) {
+      final value = swToShort(data.asTypedList(dataLength));
+      calloc.free(data);
+      return value;
     }
-    throw Exception(
-        'uvc: _getBacklightCompensation error: ${fromInt8ToString(err)}');
+
+    calloc.free(data);
+    final err = _libusb.libusb_strerror(ret);
+    final msg = 'uvc: _getBrightness error: ${fromInt8ToString(err)}';
+    if (debugLogging) print(msg);
+    throw Exception(msg);
+  }
+
+  /// Sets the BRIGHTNESS control.
+  void _setBrightness(Pointer<libusb_device_handle> handle, UvcReqCode reqCode,
+      int value, int bTerminalID, int bInterfaceNumber) {
+    const dataLength = 2;
+    final data = calloc<Uint8>(dataLength);
+
+    SHORT_TO_SW(value, data);
+    final bUnitID = _info.ctrl_if?.processing_unit_descs.first.bUnitID ?? 0;
+
+    final ret = _libusb.libusb_control_transfer(
+        handle,
+        REQ_TYPE_SET,
+        reqCode.value,
+        (UvcPuControlSelector.brightness.index << 8).toUnsigned(16),
+        (bUnitID << 8 | bInterfaceNumber).toUnsigned(16),
+        data,
+        dataLength,
+        0);
+
+    calloc.free(data);
+    if (ret == dataLength) return;
+
+    final err = _libusb.libusb_strerror(ret);
+    final msg = 'uvc: _setBrightness error: ${fromInt8ToString(err)}';
+    if (debugLogging) print(msg);
+    throw Exception(msg);
+  }
+
+  /// Reads the BRIGHTNESS control.
+  int _getContrast(Pointer<libusb_device_handle> handle, UvcReqCode reqCode,
+      int bTerminalID, int bInterfaceNumber) {
+    const dataLength = 2;
+    final data = calloc<Uint8>(dataLength);
+
+    final bUnitID = _info.ctrl_if?.processing_unit_descs.first.bUnitID ?? 0;
+
+    final ret = _libusb.libusb_control_transfer(
+        handle,
+        REQ_TYPE_GET,
+        reqCode.value,
+        (UvcPuControlSelector.contrast.index << 8).toUnsigned(16),
+        (bUnitID << 8 | bInterfaceNumber).toUnsigned(16),
+        data,
+        dataLength,
+        0);
+    if (ret == dataLength) {
+      final value = swToShort(data.asTypedList(dataLength));
+      calloc.free(data);
+      return value;
+    }
+
+    calloc.free(data);
+    final err = _libusb.libusb_strerror(ret);
+    final msg = 'uvc: _getContrast error: ${fromInt8ToString(err)}';
+    if (debugLogging) print(msg);
+    throw Exception(msg);
+  }
+
+  /// Sets the CONTRAST control.
+  void _setContrast(Pointer<libusb_device_handle> handle, UvcReqCode reqCode,
+      int value, int bTerminalID, int bInterfaceNumber) {
+    const dataLength = 2;
+    final data = calloc<Uint8>(dataLength);
+
+    SHORT_TO_SW(value, data);
+    final bUnitID = _info.ctrl_if?.processing_unit_descs.first.bUnitID ?? 0;
+
+    final ret = _libusb.libusb_control_transfer(
+        handle,
+        REQ_TYPE_SET,
+        reqCode.value,
+        (UvcPuControlSelector.contrast.index << 8).toUnsigned(16),
+        (bUnitID << 8 | bInterfaceNumber).toUnsigned(16),
+        data,
+        dataLength,
+        0);
+
+    calloc.free(data);
+    if (ret == dataLength) return;
+
+    final err = _libusb.libusb_strerror(ret);
+    final msg = 'uvc: _setContrast error: ${fromInt8ToString(err)}';
+    if (debugLogging) print(msg);
+    throw Exception(msg);
+  }
+
+  /// Reads the SATURATION control.
+  int _getSaturation(Pointer<libusb_device_handle> handle, UvcReqCode reqCode,
+      int bTerminalID, int bInterfaceNumber) {
+    const dataLength = 2;
+    final data = calloc<Uint8>(dataLength);
+
+    final bUnitID = _info.ctrl_if?.processing_unit_descs.first.bUnitID ?? 0;
+
+    final ret = _libusb.libusb_control_transfer(
+        handle,
+        REQ_TYPE_GET,
+        reqCode.value,
+        (UvcPuControlSelector.saturation.index << 8).toUnsigned(16),
+        (bUnitID << 8 | bInterfaceNumber).toUnsigned(16),
+        data,
+        dataLength,
+        0);
+    if (ret == dataLength) {
+      final value = swToShort(data.asTypedList(dataLength));
+      calloc.free(data);
+      return value;
+    }
+
+    calloc.free(data);
+    final err = _libusb.libusb_strerror(ret);
+    final msg = 'uvc: _getSaturation error: ${fromInt8ToString(err)}';
+    if (debugLogging) print(msg);
+    throw Exception(msg);
+  }
+
+  /// Sets the SATURATION control.
+  void _setSaturation(Pointer<libusb_device_handle> handle, UvcReqCode reqCode,
+      int value, int bTerminalID, int bInterfaceNumber) {
+    const dataLength = 2;
+    final data = calloc<Uint8>(dataLength);
+
+    SHORT_TO_SW(value, data);
+    final bUnitID = _info.ctrl_if?.processing_unit_descs.first.bUnitID ?? 0;
+
+    final ret = _libusb.libusb_control_transfer(
+        handle,
+        REQ_TYPE_SET,
+        reqCode.value,
+        (UvcPuControlSelector.saturation.index << 8).toUnsigned(16),
+        (bUnitID << 8 | bInterfaceNumber).toUnsigned(16),
+        data,
+        dataLength,
+        0);
+
+    calloc.free(data);
+    if (ret == dataLength) return;
+
+    final err = _libusb.libusb_strerror(ret);
+    final msg = 'uvc: _setSaturation error: ${fromInt8ToString(err)}';
+    if (debugLogging) print(msg);
+    throw Exception(msg);
+  }
+
+  /// Reads the SHARPNESS control.
+  int _getSharpness(Pointer<libusb_device_handle> handle, UvcReqCode reqCode,
+      int bTerminalID, int bInterfaceNumber) {
+    const dataLength = 2;
+    final data = calloc<Uint8>(dataLength);
+
+    final bUnitID = _info.ctrl_if?.processing_unit_descs.first.bUnitID ?? 0;
+
+    final ret = _libusb.libusb_control_transfer(
+        handle,
+        REQ_TYPE_GET,
+        reqCode.value,
+        (UvcPuControlSelector.sharpness.index << 8).toUnsigned(16),
+        (bUnitID << 8 | bInterfaceNumber).toUnsigned(16),
+        data,
+        dataLength,
+        0);
+    if (ret == dataLength) {
+      final value = swToShort(data.asTypedList(dataLength));
+      calloc.free(data);
+      return value;
+    }
+
+    calloc.free(data);
+    final err = _libusb.libusb_strerror(ret);
+    final msg = 'uvc: _getSharpness error: ${fromInt8ToString(err)}';
+    if (debugLogging) print(msg);
+    throw Exception(msg);
+  }
+
+  /// Sets the SHARPNESS control.
+  void _setSharpness(Pointer<libusb_device_handle> handle, UvcReqCode reqCode,
+      int value, int bTerminalID, int bInterfaceNumber) {
+    const dataLength = 2;
+    final data = calloc<Uint8>(dataLength);
+
+    SHORT_TO_SW(value, data);
+    final bUnitID = _info.ctrl_if?.processing_unit_descs.first.bUnitID ?? 0;
+
+    final ret = _libusb.libusb_control_transfer(
+        handle,
+        REQ_TYPE_SET,
+        reqCode.value,
+        (UvcPuControlSelector.sharpness.index << 8).toUnsigned(16),
+        (bUnitID << 8 | bInterfaceNumber).toUnsigned(16),
+        data,
+        dataLength,
+        0);
+
+    calloc.free(data);
+    if (ret == dataLength) return;
+
+    final err = _libusb.libusb_strerror(ret);
+    final msg = 'uvc: _setSharpness error: ${fromInt8ToString(err)}';
+    if (debugLogging) print(msg);
+    throw Exception(msg);
+  }
+
+  /// Reads the WHITE BALANCE control.
+  int _getWhiteBalance(Pointer<libusb_device_handle> handle, UvcReqCode reqCode,
+      int bTerminalID, int bInterfaceNumber) {
+    const dataLength = 2;
+    final data = calloc<Uint8>(dataLength);
+
+    final bUnitID = _info.ctrl_if?.processing_unit_descs.first.bUnitID ?? 0;
+
+    final ret = _libusb.libusb_control_transfer(
+        handle,
+        REQ_TYPE_GET,
+        reqCode.value,
+        (UvcPuControlSelector.whiteBalanceTemperature.index << 8)
+            .toUnsigned(16),
+        (bUnitID << 8 | bInterfaceNumber).toUnsigned(16),
+        data,
+        dataLength,
+        0);
+    if (ret == dataLength) {
+      final value = swToShort(data.asTypedList(dataLength));
+      calloc.free(data);
+      return value;
+    }
+
+    calloc.free(data);
+    final err = _libusb.libusb_strerror(ret);
+    final msg = 'uvc: _getWhiteBalance error: ${fromInt8ToString(err)}';
+    if (debugLogging) print(msg);
+    throw Exception(msg);
+  }
+
+  /// Sets the WHITE BALANCE control.
+  void _setWhiteBalance(Pointer<libusb_device_handle> handle,
+      UvcReqCode reqCode, int value, int bTerminalID, int bInterfaceNumber) {
+    const dataLength = 2;
+    final data = calloc<Uint8>(dataLength);
+
+    SHORT_TO_SW(value, data);
+    final bUnitID = _info.ctrl_if?.processing_unit_descs.first.bUnitID ?? 0;
+
+    final ret = _libusb.libusb_control_transfer(
+        handle,
+        REQ_TYPE_SET,
+        reqCode.value,
+        (UvcPuControlSelector.whiteBalanceTemperature.index << 8)
+            .toUnsigned(16),
+        (bUnitID << 8 | bInterfaceNumber).toUnsigned(16),
+        data,
+        dataLength,
+        0);
+
+    calloc.free(data);
+    if (ret == dataLength) return;
+
+    final err = _libusb.libusb_strerror(ret);
+    final msg = 'uvc: _setWhiteBalance error: ${fromInt8ToString(err)}';
+    if (debugLogging) print(msg);
+    throw Exception(msg);
   }
 
   /// Reads the powerline frequency control.
@@ -312,7 +762,7 @@ class UvcControl {
     const dataLength = 1;
     final data = calloc<Uint8>(dataLength);
 
-    final bUnitID = info.ctrl_if?.processing_unit_descs.first.bUnitID ?? 0;
+    final bUnitID = _info.ctrl_if?.processing_unit_descs.first.bUnitID ?? 0;
 
     final ret = _libusb.libusb_control_transfer(
         handle,
@@ -650,102 +1100,5 @@ class UvcControl {
       print('uvc: _setPanAbsolute error: ${fromInt8ToString(err)}');
     }
     throw Exception('uvc: _setPanAbsolute error: ${fromInt8ToString(err)}');
-  }
-
-  /// Sets the TILT ABSOLUTE control.
-  /// UVC request code (A.8)
-  void _setTiltAbsolute(Pointer<libusb_device_handle> handle,
-      UvcReqCode reqCode, int value, int bTerminalID, int bInterfaceNumber) {
-    const dataLength = 8;
-    final data = calloc<Uint8>(dataLength);
-
-    // First, get the pan value since pan/tilt have to be set together.
-    final pan = _getPanAbsolute(
-        handle, UvcReqCode.getCurrent, bTerminalID, bInterfaceNumber);
-    final tilt = value;
-
-    INT_TO_DW(pan, data + 0);
-    INT_TO_DW(tilt, data + 4);
-
-    final ret = _libusb.libusb_control_transfer(
-        handle,
-        REQ_TYPE_SET,
-        reqCode.value,
-        (UvcCtCtrlSelector.pantiltAbsoluteControl.value << 8).toUnsigned(16),
-        (bTerminalID << 8 | bInterfaceNumber).toUnsigned(16),
-        data,
-        dataLength,
-        0);
-
-    calloc.free(data);
-    if (ret == dataLength) {
-      return;
-    }
-
-    final err = _libusb.libusb_strerror(ret);
-    if (debugLogging) {
-      print('uvc: _setTiltAbsolute error: ${fromInt8ToString(err)}');
-    }
-    throw Exception('uvc: _setTiltAbsolute error: ${fromInt8ToString(err)}');
-  }
-}
-
-class UvcController {
-  UvcController(
-    this.handlePtr,
-    this.getHandler,
-    this.setHandler, {
-    required this.bTerminalID,
-    required this.bInterfaceNumber,
-    required this.info,
-  });
-
-  Pointer<libusb_device_handle>? handlePtr;
-  final UvcControlGetHandler getHandler;
-  final UvcControlSetHandler setHandler;
-  final int bTerminalID;
-  final int bInterfaceNumber;
-  final uvc_device_info info;
-
-  /// Get the control current value.
-  int? get current =>
-      _controlGet(UvcReqCode.getCurrent, bTerminalID, bInterfaceNumber);
-
-  /// Set the control current value.
-  set current(int? value) => _controlSet(UvcReqCode.setCurrent, value);
-
-  /// Get the control default value.
-  int? get defaultValue =>
-      _controlGet(UvcReqCode.getDef, bTerminalID, bInterfaceNumber);
-
-  /// Get the control info value.
-  /// TODO: this does not work for `zoom absolute get`.
-  int? get information =>
-      _controlGet(UvcReqCode.getInfo, bTerminalID, bInterfaceNumber);
-
-  /// Get the control length value.
-  /// TODO: this does not work for `zoom absolute get`.
-  int? get len => _controlGet(UvcReqCode.getLen, bTerminalID, bInterfaceNumber);
-
-  /// Get the control maximum value.
-  int? get max => _controlGet(UvcReqCode.getMax, bTerminalID, bInterfaceNumber);
-
-  /// Get the control minimum value.
-  int? get min => _controlGet(UvcReqCode.getMin, bTerminalID, bInterfaceNumber);
-
-  /// Get the control resolution.
-  int? get resolution =>
-      _controlGet(UvcReqCode.getRes, bTerminalID, bInterfaceNumber);
-
-  int? _controlGet(UvcReqCode reqCode, int bTerminalID, int bInterfaceNumber) {
-    if (handlePtr == null) return null;
-    final rv = getHandler(handlePtr!, reqCode, bTerminalID, bInterfaceNumber);
-    return rv;
-  }
-
-  void _controlSet(UvcReqCode reqCode, int? value) {
-    if (handlePtr == null || value == null) return;
-    setHandler(handlePtr!, reqCode, value, bTerminalID, bInterfaceNumber);
-    return;
   }
 }

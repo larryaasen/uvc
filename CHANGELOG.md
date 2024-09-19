@@ -1,7 +1,19 @@
 ## Next
 
-- Added backlight compensation `camera.backlightCompensation`.
-- Added powerline frequency `camera.powerlineFrequency`.
+## 1.2.0
+
+- Added support for macOS arm and intel, where only intel was previsouly supported.
+- Added brightness: `camera.brightness.current`.
+
+## 1.1.0
+
+- Added backlight compensation
+- Added powerline frequency
+- Added brightness
+- Added contrast
+- Added saturation
+- Added sharpness
+- Added whitebalance
 - Can now set focus and focus auto, not just get the values.
 
 ## 1.0.0

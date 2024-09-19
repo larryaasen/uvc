@@ -1,5 +1,3 @@
-# uvc
-
 [![GitHub main workflow](https://github.com/larryaasen/uvc/actions/workflows/main.yml/badge.svg)](https://github.com/larryaasen/uvc/actions/workflows/main.yml)
 [![codecov](https://codecov.io/gh/larryaasen/uvc/branch/main/graph/badge.svg)](https://app.codecov.io/gh/larryaasen/uvc)
 [![pub package](https://img.shields.io/pub/v/uvc.svg)](https://pub.dartlang.org/packages/uvc)
@@ -29,9 +27,9 @@ void main() {
 
   final camera = UVCControl(vendorId: 0x1532, productId: 0x0E05);
 
-  print('zoom: ${camera.zoom.current}');
+  final value = camera.zoom.min;
+  camera.zoom.current = value == null ? 225 : value + 1;
 
-  camera.zoom.current = 225;
   camera.close();
 
   uvc.dispose();
@@ -64,12 +62,17 @@ final productId = device.deviceDescriptor.productId;
 
 To get the zoom current value:
 ```
-print('zoom: ${camera.zoom.current}');
+final value = camera.zoom.current;
 ```
 
 To set the zoom current value:
 ```
 camera.zoom.current = 225;
+```
+
+Close the camera when you are done.
+```
+camera.close();
 ```
 
 It is always a good idea to unload the library when you are done using it.
@@ -95,19 +98,16 @@ camera.tilt.min;
 ## Controls
 
 ### Pan
-
 ```
 camera.pan.current;
 ```
 
 ### Tilt
-
 ```
 camera.tilt.current;
 ```
 
 ### Zoom 
-
 ```
 final camera = UVCControl(vendorId: 0x1532, productId: 0x0E05);
 
@@ -119,25 +119,46 @@ camera.zoom.resolution;
 ```
 
 ### Backlight Compensation
-
 ```
 camera.backlightCompensation.current;
 ```
 
-### Focus
+### Brightness
+```
+camera.brightness.current;
+```
 
+### Contrast
+```
+camera.contrast.current;
+```
+
+### Saturation
+```
+camera.contrast.saturation;
+```
+
+### Sharpness
+```
+camera.contrast.sharpness;
+```
+
+### White Balance
+```
+camera.contrast.whitebalance;
+```
+
+### Focus
 ```
 camera.zoom.current;
 ```
 
 ### Focus (auto)
-
 ```
 camera.focusAuto.current;
 ```
 
 ### Powerline Frequency
-
 ```
 camera.powerlineFrequency.current;
 ```
@@ -165,4 +186,4 @@ All [comments](https://github.com/larryaasen/uvc/issues) and [pull requests](htt
 
 ## Donations / Sponsor
 
-Please sponsor or donate to the creator of `uvc` on [Flattr](https://flattr.com/@larryaasen) or [Patreon](https://www.patreon.com/larryaasen).
+Please sponsor or donate to the creator of `uvc` on [Patreon](https://www.patreon.com/larryaasen).

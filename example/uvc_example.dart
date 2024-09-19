@@ -3,10 +3,10 @@
 import 'package:uvc/uvc.dart';
 
 Future<void> main() async {
-  final uvc = UvcLib();
+  final uvc = UvcLib(debugLogging: true, debugLoggingLibUsb: false);
 
-  printUvcDevices(uvc);
-  printUsbDevices(uvc);
+  // printUvcDevices(uvc);
+  // printUsbDevices(uvc);
   await cameraExample(uvc);
 
   uvc.dispose();
@@ -15,14 +15,14 @@ Future<void> main() async {
 void printUvcDevices(UvcLib uvc) {
   final uvcDevices = uvc.devices.get(onlyUvcDevices: true);
   for (final device in uvcDevices) {
-    print('UvcDevice: $device');
+    print('example: UvcDevice: $device');
   }
 }
 
 void printUsbDevices(UvcLib uvc) {
   final usbDevices = uvc.devices.get();
   for (final device in usbDevices) {
-    print('UsbDevice: $device');
+    print('example: UsbDevice: $device');
   }
 }
 
@@ -30,15 +30,18 @@ Future<void> cameraExample(UvcLib uvc) async {
   final camera =
       uvc.control(vendorId: 0x1532, productId: 0x0E05); // Razer Kiyo Pro
   // final camera = uvc.control(vendorId: 0x046D, productId: 0x0825); // Logitech
+  print('example: camera is open: ${camera.isOpen()}');
 
   try {
-    camera.zoom.current;
-    camera.zoom.min;
-    camera.zoom.max;
-    camera.zoom.defaultValue;
-    // camera.zoom.information;
-    // camera.zoom.len;
-    camera.zoom.resolution;
+    // camera.resetDevice();
+
+    // camera.zoom.current;
+    // camera.zoom.min;
+    // camera.zoom.max;
+    // camera.zoom.defaultValue;
+    // // camera.zoom.information;
+    // // camera.zoom.len;
+    // camera.zoom.resolution;
   } catch (e) {
     print('example: camera zoom set error: $e');
     camera.close();
@@ -46,13 +49,19 @@ Future<void> cameraExample(UvcLib uvc) async {
   }
 
   try {
-    printValues('backlight compensation', camera.backlightCompensation);
-    printValues('focus (auto)', camera.focusAuto);
-    printValues('focus', camera.focus);
-    printValues('pan', camera.pan);
-    printValues('tilt', camera.tilt);
-    printValues('zoom', camera.zoom);
-    printValues('powerline frequency', camera.powerlineFrequency);
+    printValues(
+        'example: backlight compensation', camera.backlightCompensation);
+    printValues('example: brightness', camera.brightness);
+    printValues('example: contrast', camera.contrast);
+    printValues('example: saturation', camera.saturation);
+    printValues('example: sharpness', camera.sharpness);
+    printValues('example: whiteBalance', camera.whiteBalance);
+    printValues('example: focus (auto)', camera.focusAuto);
+    printValues('example: focus', camera.focus);
+    printValues('example: pan', camera.pan);
+    printValues('example: tilt', camera.tilt);
+    printValues('example: zoom', camera.zoom);
+    printValues('example: powerline frequency', camera.powerlineFrequency);
   } catch (e) {
     print('example: camera error: $e');
   }
@@ -79,7 +88,11 @@ Future<void> animateValue(
 }
 
 void printValues(String name, UvcController controller) {
-  print(
-      '$name: ${controller.current} (${controller.min} to ${controller.max}), '
-      'default: ${controller.defaultValue}, resolution: ${controller.resolution}');
+  try {
+    print(
+        'example: ${controller.name}: ${controller.current} (${controller.min} to ${controller.max}), '
+        'default: ${controller.defaultValue}, resolution: ${controller.resolution}');
+  } catch (e) {
+    print('example: ${controller.name} error: $e');
+  }
 }

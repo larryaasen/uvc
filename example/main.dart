@@ -7,9 +7,9 @@ void main() {
 
   final camera = uvc.control(vendorId: 0x1532, productId: 0x0E05);
 
-  print('zoom: ${camera.zoom.current}');
+  final value = camera.zoom.min;
+  camera.zoom.current = value == null ? 225 : value + 1;
 
-  camera.zoom.current = 225;
   camera.close();
 
   uvc.dispose();
