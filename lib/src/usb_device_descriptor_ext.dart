@@ -13,7 +13,9 @@ extension UsbDeviceDescriptorExt on UsbDeviceDescriptor {
       Libusb libusb, Pointer<libusb_device> usbDevPtr) {
     final descPtr = calloc<libusb_device_descriptor>();
     if (libusb.libusb_get_device_descriptor(usbDevPtr, descPtr) !=
-        libusb_error.LIBUSB_SUCCESS) return null;
+        libusb_error.LIBUSB_SUCCESS) {
+      return null;
+    }
 
     final devDesc = descPtr.ref;
 

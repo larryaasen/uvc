@@ -1,4 +1,6 @@
-## Next
+## 1.3.0
+
+- Fixed lint warnings and updated package dependencies tp support the latest versions.
 
 ## 1.2.0
 

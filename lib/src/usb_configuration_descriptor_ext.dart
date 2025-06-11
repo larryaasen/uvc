@@ -40,7 +40,9 @@ extension UsbConfigurationDescriptorExt on UsbConfigDescriptor {
     var configPtr = calloc<Pointer<libusb_config_descriptor>>();
     if (libusb.libusb_get_config_descriptor(
             usbDevPtr, configIndex, configPtr) !=
-        libusb_error.LIBUSB_SUCCESS) return null;
+        libusb_error.LIBUSB_SUCCESS) {
+      return null;
+    }
 
     final usbInterfaces = <UsbInterface>[];
 
